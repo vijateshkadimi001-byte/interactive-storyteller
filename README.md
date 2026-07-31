@@ -50,3 +50,23 @@ SQLite Database
   │
   └── Story State
   └── Conversation History
+
+  ## 📸 Screenshots
+
+### Main Interface
+
+The main Interactive Storyteller interface where users can start a new story, view existing stories, and interact with the AI storyteller.
+
+![Main Interface](documentation/screenshots/main-interface.png)
+
+### Deployed Application
+
+The deployed Interactive Storyteller application running on the public Vercel URL.
+
+![Deployed Application](documentation/screenshots/deployed-application.png)
+
+### API Documentation
+
+FastAPI Swagger UI showing the available backend API endpoints used by the Interactive Storyteller application.
+
+![API Documentation](documentation/screenshots/api-documentation.png)
