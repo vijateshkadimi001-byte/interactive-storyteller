@@ -1,266 +1,644 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
+
+const API_URL = "http://127.0.0.1:8000";
 
 function App() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
+  const [stories, setStories] = useState([]);
   const [storyId, setStoryId] = useState(null);
+  const [choices, setChoices] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [lastMessage, setLastMessage] = useState("");
+  const [loadingStories, setLoadingStories] = useState(true);
 
-  const startNewStory = () => {
-    setMessage("");
-    setMessages([]);
-    setStoryId(null);
-    setLoading(false);
-    setLastMessage("");
-  };
+  // Load stories when application starts
+  useEffect(() => {
+    loadStories();
+  }, []);
 
-  const sendMessage = async (customMessage = null) => {
-    const userMessage =
-      customMessage !== null ? customMessage : message;
-
-    if (!userMessage.trim() || loading) {
-      return;
-    }
-
-    setLastMessage(userMessage);
-    setMessage("");
-    setLoading(true);
-
-    setMessages((previousMessages) => [
-      ...previousMessages,
-      {
-        role: "user",
-        content: userMessage,
-      },
-    ]);
-
+  // Load all saved stories
+  const loadStories = async () => {
     try {
+      setLoadingStories(true);
+
       const response = await fetch(
-        "http://127.0.0.1:8000/story",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            message: userMessage,
-            story_id: storyId,
-          }),
-        }
+        `${API_URL}/stories`
       );
 
       if (!response.ok) {
         throw new Error(
-          `Backend returned status ${response.status}`
+          "Failed to load stories"
         );
       }
 
       const data = await response.json();
 
-      setStoryId(data.story_id);
+      setStories(data);
 
-      setMessages((previousMessages) => [
-        ...previousMessages,
-        {
-          role: "ai",
-          content: data.message,
-        },
-      ]);
     } catch (error) {
-      console.error("Error:", error);
-
-      setMessages((previousMessages) => [
-        ...previousMessages,
-        {
-          role: "error",
-          content:
-            "Something went wrong while generating the story.",
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const retryLastMessage = () => {
-    if (lastMessage && !loading) {
-      setMessages((previousMessages) =>
-        previousMessages.filter(
-          (item) => item.role !== "error"
-        )
+      console.error(
+        "Error loading stories:",
+        error
       );
 
-      sendMessage(lastMessage);
+    } finally {
+      setLoadingStories(false);
     }
   };
 
+
+  // Start a new story
+  const startNewStory = () => {
+    setMessage("");
+    setMessages([]);
+    setStoryId(null);
+    setChoices([]);
+  };
+
+
+  // Load an existing story
+  const loadStory = async (
+    selectedStoryId
+  ) => {
+
+    if (loading) {
+      return;
+    }
+
+    try {
+
+      setLoading(true);
+
+      const response = await fetch(
+        `${API_URL}/story/${selectedStoryId}`
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          "Failed to load selected story"
+        );
+      }
+
+      const data = await response.json();
+
+      setStoryId(
+        data.story_id
+      );
+
+
+      // Convert database conversation
+      // into frontend messages
+
+      const loadedMessages =
+        data.conversation.map(
+          (item) => ({
+            role:
+              item.role === "user"
+                ? "user"
+                : "ai",
+
+            content:
+              item.content,
+          })
+        );
+
+
+      setMessages(
+        loadedMessages
+      );
+
+
+      // Clear choices when loading
+      // an old story
+
+      setChoices([]);
+
+    } catch (error) {
+
+      console.error(
+        "Error loading story:",
+        error
+      );
+
+    } finally {
+
+      setLoading(false);
+
+    }
+  };
+
+
+  // Send message to backend
+  const sendMessage = async (
+    selectedMessage = null
+  ) => {
+
+    const messageToSend =
+      selectedMessage !== null
+        ? selectedMessage
+        : message.trim();
+
+
+    if (
+      !messageToSend ||
+      loading
+    ) {
+      return;
+    }
+
+
+    // Add user message
+    // immediately to UI
+
+    setMessages(
+      (previousMessages) => [
+        ...previousMessages,
+
+        {
+          role: "user",
+          content: messageToSend,
+        },
+      ]
+    );
+
+
+    setMessage("");
+
+    // Remove old choices
+    setChoices([]);
+
+    setLoading(true);
+
+
+    try {
+
+      const response =
+        await fetch(
+          `${API_URL}/story`,
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              message:
+                messageToSend,
+
+              story_id:
+                storyId,
+            }),
+          }
+        );
+
+
+      if (!response.ok) {
+
+        throw new Error(
+          "Failed to generate story"
+        );
+
+      }
+
+
+      const data =
+        await response.json();
+
+
+      // Save story ID
+
+      setStoryId(
+        data.story_id
+      );
+
+
+      // Add AI response
+
+      setMessages(
+        (previousMessages) => [
+          ...previousMessages,
+
+          {
+            role: "ai",
+            content:
+              data.message,
+          },
+        ]
+      );
+
+
+      // Save new choices
+
+      setChoices(
+        data.choices || []
+      );
+
+
+      // Refresh sidebar
+
+      await loadStories();
+
+
+    } catch (error) {
+
+      console.error(
+        error
+      );
+
+
+      setMessages(
+        (previousMessages) => [
+          ...previousMessages,
+
+          {
+            role: "error",
+
+            content:
+              "Something went wrong. Please try again.",
+          },
+        ]
+      );
+
+
+    } finally {
+
+      setLoading(false);
+
+    }
+  };
+
+
   return (
+
     <div className="app">
 
-      {/* Header */}
-      <header className="header">
-        <div className="header-content">
+      {/* ========================= */}
+      {/* LEFT SIDEBAR */}
+      {/* ========================= */}
 
-          <div>
-            <h1>🌙 Interactive Storyteller</h1>
+      <aside className="sidebar">
 
-            <p>
-              Your choices shape the story.
-            </p>
-          </div>
+        <div className="sidebar-header">
+
+          <h2>
+            🌙 Storyteller
+          </h2>
+
 
           <button
             className="new-story-button"
-            onClick={startNewStory}
+            onClick={
+              startNewStory
+            }
             disabled={loading}
           >
             🆕 New Story
           </button>
 
         </div>
-      </header>
 
 
-      {/* Main Story Area */}
-      <main className="story-container">
+        <div className="stories-section">
 
-        <div className="story-box">
-
-          {/* Welcome Message */}
-          {messages.length === 0 && (
-            <div className="welcome">
-
-              <h2>
-                📖 Your Adventure Begins
-              </h2>
-
-              <p>
-                Enter a choice or action to begin your
-                interactive adventure.
-              </p>
-
-              <p className="example">
-                Example: "I enter the mysterious forest
-                at midnight."
-              </p>
-
-            </div>
-          )}
+          <h3>
+            Your Stories
+          </h3>
 
 
-          {/* Messages */}
-          {messages.map((item, index) => (
+          {loadingStories && (
 
-            <div
-              key={index}
-              className={`message ${item.role}`}
-            >
-
-              <div className="message-label">
-
-                {item.role === "user"
-                  ? "🧑 You"
-                  : item.role === "ai"
-                  ? "🌙 Storyteller"
-                  : "⚠️ Error"}
-
-              </div>
-
-
-              <div className="message-content">
-
-                {item.content}
-
-
-                {/* Retry Button */}
-                {item.role === "error" && (
-                  <button
-                    className="retry-button"
-                    onClick={retryLastMessage}
-                    disabled={loading}
-                  >
-                    🔄 Retry
-                  </button>
-                )}
-
-              </div>
-
-            </div>
-
-          ))}
-
-
-          {/* Loading Message */}
-          {loading && (
-
-            <div className="message ai">
-
-              <div className="message-label">
-                🌙 Storyteller
-              </div>
-
-              <div className="message-content loading">
-                The storyteller is thinking...
-              </div>
-
-            </div>
+            <p className="sidebar-message">
+              Loading stories...
+            </p>
 
           )}
 
-        </div>
+
+          {!loadingStories &&
+            stories.length === 0 && (
+
+              <p className="sidebar-message">
+                No stories yet.
+              </p>
+
+            )}
 
 
-        {/* Input Area */}
-        <div className="input-area">
+          <div className="story-list">
 
-          <input
-            type="text"
-            value={message}
-            onChange={(event) => {
-              setMessage(event.target.value);
-            }}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Enter" &&
-                !event.shiftKey
-              ) {
-                event.preventDefault();
-                sendMessage();
-              }
-            }}
-            placeholder="What do you do?"
-            disabled={loading}
-          />
+            {stories.map(
+              (story) => (
 
+                <button
+                  key={
+                    story.story_id
+                  }
 
-          <button
-            type="button"
-            onClick={() => sendMessage()}
-            disabled={
-              loading ||
-              message.trim().length === 0
-            }
-          >
-            {loading ? "..." : "Send"}
-          </button>
+                  className={
+                    `story-item ${
+                      story.story_id ===
+                      storyId
+                        ? "active"
+                        : ""
+                    }`
+                  }
 
-        </div>
+                  onClick={() =>
+                    loadStory(
+                      story.story_id
+                    )
+                  }
+
+                  disabled={loading}
+                >
+
+                  <span className="story-icon">
+                    📖
+                  </span>
 
 
-        {/* Story ID */}
-        {storyId && (
+                  <span className="story-title">
+                    {story.title}
+                  </span>
 
-          <div className="story-id">
-            Story ID: {storyId}
+                </button>
+
+              )
+            )}
+
           </div>
 
-        )}
+        </div>
 
-      </main>
+      </aside>
+
+
+      {/* ========================= */}
+      {/* MAIN APPLICATION */}
+      {/* ========================= */}
+
+      <div className="main-content">
+
+
+        {/* HEADER */}
+
+        <header className="header">
+
+          <div className="header-text">
+
+            <h1>
+              🌙 Interactive Storyteller
+            </h1>
+
+            <p>
+              Your choices shape the story.
+            </p>
+
+          </div>
+
+        </header>
+
+
+        {/* STORY AREA */}
+
+        <main className="story-container">
+
+
+          {/* CONVERSATION */}
+
+          <div className="story-box">
+
+
+            {messages.length === 0 && (
+
+              <div className="welcome">
+
+                <div className="welcome-icon">
+                  📖
+                </div>
+
+                <h2>
+                  Your Adventure Begins
+                </h2>
+
+                <p>
+                  Enter a choice or action
+                  to begin your interactive
+                  adventure.
+                </p>
+
+                <p className="example">
+                  Example: "I enter the
+                  mysterious forest at
+                  midnight."
+                </p>
+
+              </div>
+
+            )}
+
+
+            {messages.map(
+              (item, index) => (
+
+                <div
+                  key={index}
+
+                  className={
+                    `message ${item.role}`
+                  }
+                >
+
+                  <div className="message-label">
+
+                    {item.role ===
+                      "user"
+                      ? "🧑 You"
+                      : item.role ===
+                        "ai"
+                      ? "🌙 Storyteller"
+                      : "⚠️ Error"}
+
+                  </div>
+
+
+                  <div className="message-content">
+
+                    {item.content}
+
+                  </div>
+
+                </div>
+
+              )
+            )}
+
+
+            {/* LOADING */}
+
+            {loading && (
+
+              <div className="message ai">
+
+                <div className="message-label">
+                  🌙 Storyteller
+                </div>
+
+                <div className="message-content loading">
+
+                  The storyteller
+                  is thinking...
+
+                </div>
+
+              </div>
+
+            )}
+
+
+            {/* CLICKABLE CHOICES */}
+
+            {!loading &&
+              choices.length > 0 && (
+
+                <div className="choices-container">
+
+                  <div className="choices-title">
+                    What do you do?
+                  </div>
+
+
+                  {choices.map(
+                    (
+                      choice,
+                      index
+                    ) => (
+
+                      <button
+                        key={index}
+
+                        className="choice-button"
+
+                        onClick={() =>
+                          sendMessage(
+                            choice
+                          )
+                        }
+
+                        disabled={loading}
+                      >
+
+                        <span className="choice-icon">
+                          {index === 0
+                            ? "🌲"
+                            : index === 1
+                            ? "🔎"
+                            : "🚪"}
+                        </span>
+
+
+                        <span>
+                          {choice}
+                        </span>
+
+                      </button>
+
+                    )
+                  )}
+
+                </div>
+
+              )}
+
+          </div>
+
+
+          {/* INPUT AREA */}
+
+          <div className="input-area">
+
+            <input
+
+              type="text"
+
+              value={message}
+
+              onChange={(
+                event
+              ) =>
+                setMessage(
+                  event.target.value
+                )
+              }
+
+              onKeyDown={(
+                event
+              ) => {
+
+                if (
+                  event.key ===
+                  "Enter"
+                ) {
+
+                  sendMessage();
+
+                }
+
+              }}
+
+              placeholder="What do you do?"
+
+              disabled={loading}
+
+            />
+
+
+            <button
+
+              className="send-button"
+
+              onClick={
+                () =>
+                  sendMessage()
+              }
+
+              disabled={
+                loading ||
+                !message.trim()
+              }
+
+            >
+
+              {loading
+                ? "..."
+                : "Send"}
+
+            </button>
+
+          </div>
+
+
+          {/* STORY ID */}
+
+          {storyId && (
+
+            <div className="story-id">
+
+              Story ID: {storyId}
+
+            </div>
+
+          )}
+
+        </main>
+
+      </div>
 
     </div>
+
   );
 }
 
