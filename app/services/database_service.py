@@ -33,16 +33,81 @@ def get_story(story_id: str):
     )
 
     if story is None:
+
         db.close()
+
         return None
+
 
     result = {
         "story_id": story.story_id,
-        "state": json.loads(story.state),
+        "state": json.loads(
+            story.state
+        ),
         "conversation": json.loads(
             story.conversation
         )
     }
+
+
+    db.close()
+
+    return result
+
+
+def get_all_stories():
+
+    db = SessionLocal()
+
+    stories = (
+        db.query(Story)
+        .order_by(
+            Story.created_at.desc()
+        )
+        .all()
+    )
+
+
+    result = []
+
+
+    for story in stories:
+
+        conversation = json.loads(
+            story.conversation
+        )
+
+
+        title = "New Story"
+
+
+        for message in conversation:
+
+            if message["role"] == "user":
+
+                title = message["content"]
+
+
+                if len(title) > 40:
+
+                    title = (
+                        title[:40]
+                        + "..."
+                    )
+
+                break
+
+
+        result.append(
+            {
+                "story_id":
+                    story.story_id,
+
+                "title":
+                    title
+            }
+        )
+
 
     db.close()
 
@@ -57,6 +122,7 @@ def update_story(
 
     db = SessionLocal()
 
+
     story = (
         db.query(Story)
         .filter(
@@ -64,6 +130,7 @@ def update_story(
         )
         .first()
     )
+
 
     if story:
 
@@ -77,12 +144,16 @@ def update_story(
 
         db.commit()
 
+
     db.close()
 
 
-def delete_story(story_id: str):
+def delete_story(
+    story_id: str
+):
 
     db = SessionLocal()
+
 
     story = (
         db.query(Story)
@@ -92,13 +163,19 @@ def delete_story(story_id: str):
         .first()
     )
 
+
     if story is None:
+
         db.close()
+
         return False
 
+
     db.delete(story)
+
     db.commit()
 
     db.close()
+
 
     return True

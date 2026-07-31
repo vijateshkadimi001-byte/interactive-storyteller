@@ -12,28 +12,15 @@ from app.services.database_service import (
     update_story,
 )
 
+
 def generate_story_response(
     message: str,
     story_id: str | None = None
 ) -> tuple[str, str, list[str]]:
 
-    # Step 1: Create a new story if no story_id exists
-    if story_id is None:
+    # Step 1: Handle existing story
+    if story_id is not None:
 
-        story_id = str(
-            uuid.uuid4()
-        )
-
-        create_story(
-            story_id
-        )
-
-        conversation = []
-        current_state = StoryState()
-
-    else:
-
-        # Step 2: Retrieve existing story
         story = get_story(
             story_id
         )
@@ -52,24 +39,45 @@ def generate_story_response(
             **story["state"]
         )
 
-    # Step 3: Convert conversation history to text
-    # Keep only the most recent messages
+        is_new_story = False
+
+    else:
+
+        # New story exists only in memory
+        # until AI successfully responds
+
+        story_id = str(
+            uuid.uuid4()
+        )
+
+        conversation = []
+
+        current_state = StoryState()
+
+        is_new_story = True
+
+
+    # Step 2: Get recent conversation
     recent_conversation = conversation[-10:]
 
+
+    # Step 3: Convert conversation to text
     conversation_text = ""
 
     for item in recent_conversation:
 
         conversation_text += (
-           f"{item['role']}: "
-           f"{item['content']}\n"
+            f"{item['role']}: "
+            f"{item['content']}\n"
         )
+
 
     # Step 4: Convert story state to JSON
     story_state_text = json.dumps(
         current_state.model_dump(),
         indent=2
     )
+
 
     # Step 5: Build prompt
     prompt = build_story_prompt(
@@ -78,28 +86,33 @@ def generate_story_response(
         story_state=story_state_text
     )
 
+
     # Step 6: Ask Gemini
     result = generate_ai_response(
         prompt
     )
 
-    # Step 7: Get AI story response
+
+    # Step 7: Get AI response
     story_response = result[
         "story_response"
     ]
 
-    # Step 7.1: Get AI-generated choices
+
+    # Step 8: Get choices
     choices = result.get(
-    "choices",
-    []
+        "choices",
+        []
     )
 
-    # Step 8: Get updated story state
+
+    # Step 9: Get updated story state
     updated_state = StoryState(
         **result["story_state"]
     )
 
-    # Step 9: Add user message
+
+    # Step 10: Add user message
     conversation.append(
         {
             "role": "user",
@@ -107,7 +120,8 @@ def generate_story_response(
         }
     )
 
-    # Step 10: Add AI response
+
+    # Step 11: Add AI response
     conversation.append(
         {
             "role": "assistant",
@@ -115,16 +129,28 @@ def generate_story_response(
         }
     )
 
-    # Step 11: Save everything to database
+
+    # Step 12: Create database record
+    # Only after successful AI response
+
+    if is_new_story:
+
+        create_story(
+            story_id
+        )
+
+
+    # Step 13: Save updated story
     update_story(
         story_id=story_id,
         state=updated_state.model_dump(),
         conversation=conversation
     )
 
-    # Step 12: Return response
+
+    # Step 14: Return story, ID and choices
     return (
-    story_response,
-    story_id,
-    choices
+        story_response,
+        story_id,
+        choices
     )

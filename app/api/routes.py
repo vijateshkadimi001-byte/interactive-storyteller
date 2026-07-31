@@ -12,6 +12,7 @@ from app.services.story_service import (
 
 from app.services.database_service import (
     get_story,
+    get_all_stories,
     delete_story
 )
 
@@ -29,7 +30,7 @@ def create_story(
 
     try:
 
-        response, story_id, choices  = (
+        response, story_id, choices = (
             generate_story_response(
                 request.message,
                 request.story_id
@@ -40,7 +41,6 @@ def create_story(
             story_id=story_id,
             message=response,
             choices=choices
-
         )
 
     except ValueError as error:
@@ -49,6 +49,14 @@ def create_story(
             status_code=404,
             detail=str(error)
         )
+
+
+@router.get(
+    "/stories"
+)
+def get_all_story_details():
+
+    return get_all_stories()
 
 
 @router.get(
